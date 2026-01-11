@@ -55,7 +55,7 @@ export async function ensureDaemon(): Promise<void> {
   const child = spawn(process.execPath, [daemonPath], {
     detached: true,
     stdio: 'ignore',
-    env: { ...process.env, VEB_DAEMON: '1', VEB_SESSION: session },
+    env: { ...process.env, AGENT_BROWSER_DAEMON: '1', AGENT_BROWSER_SESSION: session },
   });
   child.unref();
 

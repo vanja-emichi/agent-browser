@@ -7,7 +7,7 @@ import { parseCommand, serializeResponse, errorResponse } from './protocol.js';
 import { executeCommand } from './actions.js';
 
 // Session support - each session gets its own socket/pid
-let currentSession = process.env.VEB_SESSION || 'default';
+let currentSession = process.env.AGENT_BROWSER_SESSION || 'default';
 
 /**
  * Set the current session
@@ -28,7 +28,7 @@ export function getSession(): string {
  */
 export function getSocketPath(session?: string): string {
   const sess = session ?? currentSession;
-  return path.join(os.tmpdir(), `veb-${sess}.sock`);
+  return path.join(os.tmpdir(), `agent-browser-${sess}.sock`);
 }
 
 /**
@@ -36,7 +36,7 @@ export function getSocketPath(session?: string): string {
  */
 export function getPidFile(session?: string): string {
   const sess = session ?? currentSession;
-  return path.join(os.tmpdir(), `veb-${sess}.pid`);
+  return path.join(os.tmpdir(), `agent-browser-${sess}.pid`);
 }
 
 /**
@@ -178,7 +178,7 @@ export async function startDaemon(): Promise<void> {
 }
 
 // Run daemon if this is the entry point
-if (process.argv[1]?.endsWith('daemon.js') || process.env.VEB_DAEMON === '1') {
+if (process.argv[1]?.endsWith('daemon.js') || process.env.AGENT_BROWSER_DAEMON === '1') {
   startDaemon().catch((err) => {
     console.error('Daemon error:', err);
     cleanupSocket();

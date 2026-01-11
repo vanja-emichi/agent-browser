@@ -15,7 +15,7 @@ function listSessions(): string[] {
     const files = fs.readdirSync(tmpDir);
     const sessions: string[] = [];
     for (const file of files) {
-      const match = file.match(/^veb-(.+)\.pid$/);
+      const match = file.match(/^agent-browser-(.+)\.pid$/);
       if (match) {
         const pidFile = path.join(tmpDir, file);
         try {
@@ -60,9 +60,9 @@ function err(msg: string): never {
 
 function printHelp(): void {
   console.log(`
-${c('bold', 'veb')} - headless browser automation
+${c('bold', 'agent-browser')} - headless browser automation for AI agents
 
-${c('yellow', 'Usage:')} veb <command> [options]
+${c('yellow', 'Usage:')} agent-browser <command> [options]
 
 ${c('yellow', 'Core Commands:')}
   ${c('cyan', 'open')} <url>                 Navigate to URL
@@ -79,26 +79,26 @@ ${c('yellow', 'Core Commands:')}
   ${c('cyan', 'eval')} <js>                  Run JavaScript
   ${c('cyan', 'close')}                      Close browser
 
-${c('yellow', 'Get Info:')}  veb get <what> [selector]
+${c('yellow', 'Get Info:')}  agent-browser get <what> [selector]
   text, html, value, attr, title, url, count, box
 
-${c('yellow', 'Check State:')}  veb is <what> <selector>
+${c('yellow', 'Check State:')}  agent-browser is <what> <selector>
   visible, enabled, checked
 
-${c('yellow', 'Find Elements:')}  veb find <locator> <action> [value]
+${c('yellow', 'Find Elements:')}  agent-browser find <locator> <action> [value]
   role, text, label, placeholder, alt, title, testid, first, last, nth
 
-${c('yellow', 'Mouse:')}  veb mouse <action> [args]
+${c('yellow', 'Mouse:')}  agent-browser mouse <action> [args]
   move <x> <y>, down, up, wheel <dy>
 
 ${c('yellow', 'Storage:')}
   ${c('cyan', 'cookies')} [get|set|clear]    Manage cookies
   ${c('cyan', 'storage')} <local|session>    Manage web storage
 
-${c('yellow', 'Browser:')}  veb set <setting> [value]
+${c('yellow', 'Browser:')}  agent-browser set <setting> [value]
   viewport, device, geo, offline, headers, credentials
 
-${c('yellow', 'Network:')}  veb network <action>
+${c('yellow', 'Network:')}  agent-browser network <action>
   route, unroute, requests
 
 ${c('yellow', 'Tabs:')}
@@ -110,21 +110,21 @@ ${c('yellow', 'Debug:')}
   ${c('cyan', 'errors')}                     View page errors
 
 ${c('yellow', 'Options:')}
-  --session <name>    Isolated session (or VEB_SESSION env)
+  --session <name>    Isolated session (or AGENT_BROWSER_SESSION env)
   --json              JSON output
   --full, -f          Full page screenshot
   --headed            Show browser window (not headless)
   --debug             Debug output
 
 ${c('yellow', 'Examples:')}
-  veb open example.com
-  veb click "#submit"
-  veb fill "#email" "test@example.com"
-  veb get text "h1"
-  veb is visible ".modal"
-  veb find role button click --name Submit
-  veb wait 2000
-  veb wait --load networkidle
+  agent-browser open example.com
+  agent-browser click "#submit"
+  agent-browser fill "#email" "test@example.com"
+  agent-browser get text "h1"
+  agent-browser is visible ".modal"
+  agent-browser find role button click --name Submit
+  agent-browser wait 2000
+  agent-browser wait --load networkidle
 `);
 }
 
@@ -267,29 +267,29 @@ async function handleGet(args: string[], id: string): Promise<Record<string, unk
 
   switch (what) {
     case 'text':
-      if (!selector) err('Selector required: veb get text <selector>');
+      if (!selector) err('Selector required: agent-browser get text <selector>');
       return { id, action: 'gettext', selector };
     case 'html':
-      if (!selector) err('Selector required: veb get html <selector>');
+      if (!selector) err('Selector required: agent-browser get html <selector>');
       return { id, action: 'innerhtml', selector };
     case 'value':
-      if (!selector) err('Selector required: veb get value <selector>');
+      if (!selector) err('Selector required: agent-browser get value <selector>');
       return { id, action: 'inputvalue', selector };
     case 'attr':
-      if (!selector || !args[2]) err('Usage: veb get attr <selector> <attribute>');
+      if (!selector || !args[2]) err('Usage: agent-browser get attr <selector> <attribute>');
       return { id, action: 'getattribute', selector, attribute: args[2] };
     case 'title':
       return { id, action: 'title' };
     case 'url':
       return { id, action: 'url' };
     case 'count':
-      if (!selector) err('Selector required: veb get count <selector>');
+      if (!selector) err('Selector required: agent-browser get count <selector>');
       return { id, action: 'count', selector };
     case 'box':
-      if (!selector) err('Selector required: veb get box <selector>');
+      if (!selector) err('Selector required: agent-browser get box <selector>');
       return { id, action: 'boundingbox', selector };
     default:
-      err(`Unknown: veb get ${what}. Options: text, html, value, attr, title, url, count, box`);
+      err(`Unknown: agent-browser get ${what}. Options: text, html, value, attr, title, url, count, box`);
   }
 }
 
@@ -297,7 +297,7 @@ async function handleIs(args: string[], id: string): Promise<Record<string, unkn
   const what = args[0];
   const selector = args[1];
 
-  if (!selector) err(`Selector required: veb is ${what} <selector>`);
+  if (!selector) err(`Selector required: agent-browser is ${what} <selector>`);
 
   switch (what) {
     case 'visible':
@@ -307,7 +307,7 @@ async function handleIs(args: string[], id: string): Promise<Record<string, unkn
     case 'checked':
       return { id, action: 'ischecked', selector };
     default:
-      err(`Unknown: veb is ${what}. Options: visible, enabled, checked`);
+      err(`Unknown: agent-browser is ${what}. Options: visible, enabled, checked`);
   }
 }
 
@@ -321,7 +321,7 @@ async function handleFind(
   const subaction = args[2] || 'click';
   const fillValue = args[3];
 
-  if (!value) err(`Value required: veb find ${locator} <value> <action>`);
+  if (!value) err(`Value required: agent-browser find ${locator} <value> <action>`);
 
   const exact = flags.exact;
   const name = flags.name;
@@ -357,7 +357,7 @@ async function handleFind(
       const sel = args[2];
       const act = args[3] || 'click';
       const val = args[4];
-      if (isNaN(idx) || !sel) err('Usage: veb find nth <index> <selector> <action>');
+      if (isNaN(idx) || !sel) err('Usage: agent-browser find nth <index> <selector> <action>');
       return { id, action: 'nth', selector: sel, index: idx, subaction: act, value: val };
     }
     default:
@@ -374,7 +374,7 @@ async function handleMouse(args: string[], id: string): Promise<Record<string, u
     case 'move': {
       const x = parseInt(args[1], 10);
       const y = parseInt(args[2], 10);
-      if (isNaN(x) || isNaN(y)) err('Usage: veb mouse move <x> <y>');
+      if (isNaN(x) || isNaN(y)) err('Usage: agent-browser mouse move <x> <y>');
       return { id, action: 'mousemove', x, y };
     }
     case 'down':
@@ -387,7 +387,7 @@ async function handleMouse(args: string[], id: string): Promise<Record<string, u
       return { id, action: 'wheel', deltaY: dy, deltaX: dx };
     }
     default:
-      err(`Unknown: veb mouse ${action}. Options: move, down, up, wheel`);
+      err(`Unknown: agent-browser mouse ${action}. Options: move, down, up, wheel`);
   }
 }
 
@@ -398,23 +398,23 @@ async function handleSet(args: string[], id: string): Promise<Record<string, unk
     case 'viewport': {
       const w = parseInt(args[1], 10);
       const h = parseInt(args[2], 10);
-      if (isNaN(w) || isNaN(h)) err('Usage: veb set viewport <width> <height>');
+      if (isNaN(w) || isNaN(h)) err('Usage: agent-browser set viewport <width> <height>');
       return { id, action: 'viewport', width: w, height: h };
     }
     case 'device':
-      if (!args[1]) err('Usage: veb set device <name>');
+      if (!args[1]) err('Usage: agent-browser set device <name>');
       return { id, action: 'device', device: args[1] };
     case 'geo':
     case 'geolocation': {
       const lat = parseFloat(args[1]);
       const lng = parseFloat(args[2]);
-      if (isNaN(lat) || isNaN(lng)) err('Usage: veb set geo <lat> <lng>');
+      if (isNaN(lat) || isNaN(lng)) err('Usage: agent-browser set geo <lat> <lng>');
       return { id, action: 'geolocation', latitude: lat, longitude: lng };
     }
     case 'offline':
       return { id, action: 'offline', offline: args[1] !== 'off' && args[1] !== 'false' };
     case 'headers':
-      if (!args[1]) err('Usage: veb set headers <json>');
+      if (!args[1]) err('Usage: agent-browser set headers <json>');
       try {
         return { id, action: 'headers', headers: JSON.parse(args[1]) };
       } catch {
@@ -423,7 +423,7 @@ async function handleSet(args: string[], id: string): Promise<Record<string, unk
       break;
     case 'credentials':
     case 'auth':
-      if (!args[1] || !args[2]) err('Usage: veb set credentials <user> <pass>');
+      if (!args[1] || !args[2]) err('Usage: agent-browser set credentials <user> <pass>');
       return { id, action: 'credentials', username: args[1], password: args[2] };
     case 'media': {
       const colorScheme = args.includes('dark')
@@ -440,7 +440,7 @@ async function handleSet(args: string[], id: string): Promise<Record<string, unk
     }
     default:
       err(
-        `Unknown: veb set ${setting}. Options: viewport, device, geo, offline, headers, credentials, media`
+        `Unknown: agent-browser set ${setting}. Options: viewport, device, geo, offline, headers, credentials, media`
       );
   }
   return {};
@@ -456,7 +456,7 @@ async function handleNetwork(
   switch (action) {
     case 'route': {
       const url = args[1];
-      if (!url) err('Usage: veb network route <url> [--abort|--body <json>]');
+      if (!url) err('Usage: agent-browser network route <url> [--abort|--body <json>]');
       const abort = allArgs.includes('--abort');
       const bodyIdx = allArgs.indexOf('--body');
       const body = bodyIdx !== -1 ? allArgs[bodyIdx + 1] : undefined;
@@ -477,7 +477,7 @@ async function handleNetwork(
       return { id, action: 'requests', clear, filter };
     }
     default:
-      err(`Unknown: veb network ${action}. Options: route, unroute, requests`);
+      err(`Unknown: agent-browser network ${action}. Options: route, unroute, requests`);
   }
   return {};
 }
@@ -487,11 +487,11 @@ async function handleStorage(args: string[], id: string): Promise<Record<string,
   const sub = args[1];
 
   if (type !== 'local' && type !== 'session') {
-    err('Usage: veb storage <local|session> [get|set|clear] [key] [value]');
+    err('Usage: agent-browser storage <local|session> [get|set|clear] [key] [value]');
   }
 
   if (sub === 'set') {
-    if (!args[2] || !args[3]) err(`Usage: veb storage ${type} set <key> <value>`);
+    if (!args[2] || !args[3]) err(`Usage: agent-browser storage ${type} set <key> <value>`);
     return { id, action: 'storage_set', type, key: args[2], value: args[3] };
   } else if (sub === 'clear') {
     return { id, action: 'storage_clear', type };
@@ -505,7 +505,7 @@ async function handleCookies(args: string[], id: string): Promise<Record<string,
   const sub = args[0];
 
   if (sub === 'set') {
-    if (!args[1]) err('Usage: veb cookies set <json>');
+    if (!args[1]) err('Usage: agent-browser cookies set <json>');
     try {
       return { id, action: 'cookies_set', cookies: JSON.parse(args[1]) };
     } catch {
@@ -531,7 +531,7 @@ async function handleTab(args: string[], id: string): Promise<Record<string, unk
     return { id, action: 'tab_close', index: idx };
   } else {
     const idx = parseInt(sub, 10);
-    if (isNaN(idx)) err(`Unknown: veb tab ${sub}. Options: new, list, close, <index>`);
+    if (isNaN(idx)) err(`Unknown: agent-browser tab ${sub}. Options: new, list, close, <index>`);
     return { id, action: 'tab_switch', index: idx };
   }
 }
@@ -542,10 +542,10 @@ async function handleTrace(args: string[], id: string): Promise<Record<string, u
   if (sub === 'start') {
     return { id, action: 'trace_start', screenshots: true, snapshots: true };
   } else if (sub === 'stop') {
-    if (!args[1]) err('Usage: veb trace stop <path>');
+    if (!args[1]) err('Usage: agent-browser trace stop <path>');
     return { id, action: 'trace_stop', path: args[1] };
   } else {
-    err('Usage: veb trace start|stop');
+    err('Usage: agent-browser trace start|stop');
   }
   return {};
 }
@@ -555,13 +555,13 @@ async function handleState(args: string[], id: string): Promise<Record<string, u
   const path = args[1];
 
   if (sub === 'save') {
-    if (!path) err('Usage: veb state save <path>');
+    if (!path) err('Usage: agent-browser state save <path>');
     return { id, action: 'state_save', path };
   } else if (sub === 'load') {
-    if (!path) err('Usage: veb state load <path>');
+    if (!path) err('Usage: agent-browser state load <path>');
     return { id, action: 'state_load', path };
   } else {
-    err('Usage: veb state save|load <path>');
+    err('Usage: agent-browser state save|load <path>');
   }
   return {};
 }
@@ -592,7 +592,7 @@ function parseFlags(args: string[]): { flags: Flags; cleanArgs: string[] } {
     text: false,
     debug: false,
     headed: false,
-    session: process.env.VEB_SESSION || 'default',
+    session: process.env.AGENT_BROWSER_SESSION || 'default',
     exact: false,
   };
 
@@ -683,12 +683,12 @@ async function main(): Promise<void> {
       break;
 
     case 'type':
-      if (!args[0] || !args[1]) err('Usage: veb type <selector> <text>');
+      if (!args[0] || !args[1]) err('Usage: agent-browser type <selector> <text>');
       cmd = { id, action: 'type', selector: args[0], text: args.slice(1).join(' ') };
       break;
 
     case 'fill':
-      if (!args[0] || !args[1]) err('Usage: veb fill <selector> <text>');
+      if (!args[0] || !args[1]) err('Usage: agent-browser fill <selector> <text>');
       cmd = { id, action: 'fill', selector: args[0], value: args.slice(1).join(' ') };
       break;
 
@@ -729,17 +729,17 @@ async function main(): Promise<void> {
       break;
 
     case 'select':
-      if (!args[0] || !args[1]) err('Usage: veb select <selector> <value>');
+      if (!args[0] || !args[1]) err('Usage: agent-browser select <selector> <value>');
       cmd = { id, action: 'select', selector: args[0], value: args[1] };
       break;
 
     case 'drag':
-      if (!args[0] || !args[1]) err('Usage: veb drag <source> <target>');
+      if (!args[0] || !args[1]) err('Usage: agent-browser drag <source> <target>');
       cmd = { id, action: 'drag', source: args[0], target: args[1] };
       break;
 
     case 'upload':
-      if (!args[0] || !args[1]) err('Usage: veb upload <selector> <files...>');
+      if (!args[0] || !args[1]) err('Usage: agent-browser upload <selector> <files...>');
       cmd = { id, action: 'upload', selector: args[0], files: args.slice(1) };
       break;
 
@@ -767,7 +767,7 @@ async function main(): Promise<void> {
       } else if (target) {
         cmd = { id, action: 'wait', selector: target };
       } else {
-        err('Usage: veb wait <selector|ms|--text|--url|--load|--fn>');
+        err('Usage: agent-browser wait <selector|ms|--text|--url|--load|--fn>');
       }
       break;
     }
@@ -852,7 +852,7 @@ async function main(): Promise<void> {
       if (args[0] === 'new') {
         cmd = { id, action: 'window_new' };
       } else {
-        err('Usage: veb window new');
+        err('Usage: agent-browser window new');
       }
       break;
 
@@ -871,7 +871,7 @@ async function main(): Promise<void> {
       } else if (args[0] === 'dismiss') {
         cmd = { id, action: 'dialog', response: 'dismiss' };
       } else {
-        err('Usage: veb dialog accept|dismiss');
+        err('Usage: agent-browser dialog accept|dismiss');
       }
       break;
 
@@ -915,7 +915,7 @@ async function main(): Promise<void> {
 
     case 'multiselect':
       if (!args[0] || args.length < 2)
-        err('Usage: veb multiselect <selector> <value1> [value2...]');
+        err('Usage: agent-browser multiselect <selector> <value1> [value2...]');
       cmd = { id, action: 'multiselect', selector: args[0], values: args.slice(1) };
       break;
 
@@ -962,7 +962,7 @@ async function main(): Promise<void> {
 
     default:
       console.error(c('red', 'Unknown command:'), command);
-      console.error(c('dim', 'Run: veb --help'));
+      console.error(c('dim', 'Run: agent-browser --help'));
       process.exit(1);
   }
 
