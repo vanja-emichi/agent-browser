@@ -80,7 +80,14 @@ pub fn parse_command(args: &[String], flags: &Flags) -> Result<Value, ParseError
             } else {
                 format!("https://{}", url)
             };
-            Ok(json!({ "id": id, "action": "navigate", "url": url }))
+            let mut nav_cmd = json!({ "id": id, "action": "navigate", "url": url });
+            // If --headers flag is set, include headers (scoped to this origin)
+            if let Some(ref headers_json) = flags.headers {
+                if let Ok(headers) = serde_json::from_str::<serde_json::Value>(headers_json) {
+                    nav_cmd["headers"] = headers;
+                }
+            }
+            Ok(nav_cmd)
         }
         "back" => Ok(json!({ "id": id, "action": "back" })),
         "forward" => Ok(json!({ "id": id, "action": "forward" })),
@@ -886,6 +893,7 @@ mod tests {
             full: false,
             headed: false,
             debug: false,
+            headers: None,
         }
     }
 
