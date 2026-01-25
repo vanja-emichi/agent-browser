@@ -679,7 +679,7 @@ async function handleSelect(command: SelectCommand, browser: BrowserManager): Pr
   const values = Array.isArray(command.values) ? command.values : [command.values];
 
   try {
-    await locator.selectOption(values);
+    await locator.selectOption(values, { timeout: 30000 });
   } catch (error) {
     throw toAIFriendlyError(error, command.selector);
   }
@@ -812,7 +812,7 @@ async function handleUpload(command: UploadCommand, browser: BrowserManager): Pr
   const locator = browser.getLocator(command.selector);
   const files = Array.isArray(command.files) ? command.files : [command.files];
   try {
-    await locator.setInputFiles(files);
+    await locator.setInputFiles(files, { timeout: 30000 });
   } catch (error) {
     throw toAIFriendlyError(error, command.selector);
   }
