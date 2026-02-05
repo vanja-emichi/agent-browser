@@ -1437,6 +1437,7 @@ mod tests {
             cli_user_agent: false,
             cli_proxy: false,
             cli_proxy_bypass: false,
+            cli_allow_file_access: false,
         }
     }
 

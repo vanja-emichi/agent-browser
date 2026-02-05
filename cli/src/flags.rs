@@ -31,6 +31,7 @@ pub struct Flags {
     pub cli_user_agent: bool,
     pub cli_proxy: bool,
     pub cli_proxy_bypass: bool,
+    pub cli_allow_file_access: bool,
 }
 
 pub fn parse_flags(args: &[String]) -> Flags {
@@ -73,6 +74,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         cli_user_agent: false,
         cli_proxy: false,
         cli_proxy_bypass: false,
+        cli_allow_file_access: false,
     };
 
     let mut i = 0;
@@ -163,7 +165,10 @@ pub fn parse_flags(args: &[String]) -> Flags {
                 }
             }
             "--ignore-https-errors" => flags.ignore_https_errors = true,
-            "--allow-file-access" => flags.allow_file_access = true,
+            "--allow-file-access" => {
+                flags.allow_file_access = true;
+                flags.cli_allow_file_access = true;
+            }
             "--device" => {
                 if let Some(d) = args.get(i + 1) {
                     flags.device = Some(d.clone());

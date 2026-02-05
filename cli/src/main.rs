@@ -268,7 +268,7 @@ fn main() {
                 None
             },
             flags.ignore_https_errors.then(|| "--ignore-https-errors"),
-            flags.allow_file_access.then(|| "--allow-file-access"),
+            flags.cli_allow_file_access.then(|| "--allow-file-access"),
         ]
         .into_iter()
         .flatten()
