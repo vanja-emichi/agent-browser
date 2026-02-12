@@ -51,3 +51,5 @@ docs/package-lock.json
 
 # pnpm
 .pnpm-store/
+patches-reference/
+__pycache__/

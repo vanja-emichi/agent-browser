@@ -1,0 +1,5 @@
+{
+ "title": "Browser",
+ "description": "Agent specialized in web browser automation using agent-browser CLI.",
+ "context": "Use this agent for web browsing tasks such as navigating websites, filling forms, extracting data, taking screenshots, and any browser-based interaction."
+}
