@@ -26,6 +26,8 @@ export interface RefMap {
     name?: string;
     /** Index for disambiguation when multiple elements have same role+name */
     nth?: number;
+    /** Global index among ALL elements of this role (regardless of name) */
+    globalNth?: number;
   };
 }
 
@@ -326,6 +328,10 @@ interface RoleNameTracker {
   getKey(role: string, name?: string): string;
   getNextIndex(role: string, name?: string): number;
   trackRef(role: string, name: string | undefined, ref: string): void;
+  /** Tracks count per role regardless of name */
+  globalRoleCounts: Map<string, number>;
+  /** Get next global index among ALL elements of a role (regardless of name) */
+  getGlobalRoleIndex(role: string): number;
   /** Get all role+name keys that have duplicates */
   getDuplicateKeys(): Set<string>;
 }
@@ -333,9 +339,11 @@ interface RoleNameTracker {
 function createRoleNameTracker(): RoleNameTracker {
   const counts = new Map<string, number>();
   const refsByKey = new Map<string, string[]>();
+  const globalRoleCounts = new Map<string, number>();
   return {
     counts,
     refsByKey,
+    globalRoleCounts,
     getKey(role: string, name?: string): string {
       return `${role}:${name ?? ''}`;
     },
@@ -343,6 +351,11 @@ function createRoleNameTracker(): RoleNameTracker {
       const key = this.getKey(role, name);
       const current = counts.get(key) ?? 0;
       counts.set(key, current + 1);
+      return current;
+    },
+    getGlobalRoleIndex(role: string): number {
+      const current = globalRoleCounts.get(role) ?? 0;
+      globalRoleCounts.set(role, current + 1);
       return current;
     },
     trackRef(role: string, name: string | undefined, ref: string): void {
@@ -383,12 +396,14 @@ function processAriaTree(ariaTree: string, refs: RefMap, options: SnapshotOption
       if (INTERACTIVE_ROLES.has(roleLower)) {
         const ref = nextRef();
         const nth = tracker.getNextIndex(roleLower, name);
+        const globalNth = tracker.getGlobalRoleIndex(roleLower);
         tracker.trackRef(roleLower, name, ref);
         refs[ref] = {
           selector: buildSelector(roleLower, name),
           role: roleLower,
           name,
           nth, // Always store nth, we'll use it for duplicates
+          globalNth, // Position among ALL elements of this role
         };
 
         let enhanced = `- ${role}`;
@@ -510,6 +525,7 @@ function processLine(
   if (shouldHaveRef) {
     const ref = nextRef();
     const nth = tracker.getNextIndex(roleLower, name);
+    const globalNth = tracker.getGlobalRoleIndex(roleLower);
     tracker.trackRef(roleLower, name, ref);
 
     refs[ref] = {
@@ -517,6 +533,7 @@ function processLine(
       role: roleLower,
       name,
       nth, // Always store nth, we'll clean up non-duplicates later
+      globalNth, // Position among ALL elements of this role
     };
 
     // Build enhanced line with ref
