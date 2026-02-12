@@ -144,6 +144,71 @@ interface SnapshotData {
   refs?: Record<string, { role: string; name?: string }>;
 }
 
+interface NetworkStats {
+  requestCount: number;
+  elapsed: number;
+  timedOut: boolean;
+  urls: string[];
+}
+
+/**
+ * Wait for XHR/fetch network activity triggered by an action to settle.
+ */
+async function withNetworkSettled(
+  page: Page,
+  actionFn: () => Promise<any>,
+  timeout = 10000
+): Promise<NetworkStats> {
+  const pending = new Set<any>();
+  const ajaxUrls: string[] = [];
+  const startTime = Date.now();
+  const onReq = (req: any) => {
+    const t = req.resourceType();
+    if (t === 'xhr' || t === 'fetch') { pending.add(req); ajaxUrls.push(req.url()); }
+  };
+  const onRes = (res: any) => { pending.delete(res.request()); };
+  const onFail = (req: any) => { pending.delete(req); };
+  page.on('request', onReq);
+  page.on('response', onRes);
+  page.on('requestfailed', onFail);
+  try {
+    await actionFn();
+    await new Promise(r => setTimeout(r, 150));
+    if (pending.size > 0) {
+      const deadline = Date.now() + timeout;
+      while (pending.size > 0 && Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 100));
+      }
+      if (pending.size === 0) await new Promise(r => setTimeout(r, 150));
+    }
+  } finally {
+    page.off('request', onReq);
+    page.off('response', onRes);
+    page.off('requestfailed', onFail);
+  }
+  const elapsed = Date.now() - startTime;
+  const shortUrls = ajaxUrls.map(u => {
+    try { const p = new URL(u); return p.pathname.split('/').pop() || p.pathname; }
+    catch (_e) { return u; }
+  });
+  return { requestCount: ajaxUrls.length, elapsed, timedOut: pending.size > 0, urls: shortUrls };
+}
+
+function describeAction(
+  action: string, selector: string, stats: NetworkStats
+): string {
+  let note = `${action} ${selector}`;
+  if (stats.requestCount > 0) {
+    const urlList = stats.urls.slice(0, 3).join(', ');
+    const more = stats.requestCount > 3 ? ` +${stats.requestCount - 3} more` : '';
+    note += ` → ${stats.requestCount} AJAX call${stats.requestCount > 1 ? 's' : ''} (${stats.elapsed}ms): ${urlList}${more}`;
+    if (stats.timedOut) note += ' [some still pending]';
+  } else {
+    note += ` (${stats.elapsed}ms, no AJAX)`;
+  }
+  return note;
+}
+
 /**
  * Convert Playwright errors to AI-friendly messages
  * @internal Exported for testing
@@ -480,67 +545,82 @@ async function handleNavigate(
   browser: BrowserManager
 ): Promise<Response<NavigateData>> {
   const page = browser.getPage();
-
-  // If headers are provided, set up scoped headers for this origin
   if (command.headers && Object.keys(command.headers).length > 0) {
     await browser.setScopedHeaders(command.url, command.headers);
   }
-
-  await page.goto(command.url, {
-    waitUntil: command.waitUntil ?? 'load',
-  });
-
+  await page.goto(command.url, { waitUntil: command.waitUntil ?? 'load' });
+  const navTitle = await page.title();
   return successResponse(command.id, {
     url: page.url(),
-    title: await page.title(),
+    title: navTitle,
+    note: `Navigated to ${page.url()} ("${navTitle}")`,
   });
 }
 
 async function handleClick(command: ClickCommand, browser: BrowserManager): Promise<Response> {
-  // Support both refs (@e1) and regular selectors
   const locator = browser.getLocator(command.selector);
-
+  const page = browser.getPage();
+  let stats: NetworkStats;
+  const pagesBefore = browser.getPages().length;
+  const clickOpts = {
+    button: command.button,
+    clickCount: command.clickCount,
+    delay: command.delay,
+    timeout: 5000,
+  };
   try {
-    await locator.click({
-      button: command.button,
-      clickCount: command.clickCount,
-      delay: command.delay,
-    });
+    stats = await withNetworkSettled(page, () => locator.click(clickOpts), 5000);
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes('Timeout') || msg.includes('timeout')) {
+      return successResponse(command.id, {
+        clicked: true,
+        note: `Clicked ${command.selector} (timed out waiting for action to complete - page may still be loading)`,
+      });
+    }
     throw toAIFriendlyError(error, command.selector);
   }
-
-  return successResponse(command.id, { clicked: true });
+  const pagesAfter = browser.getPages().length;
+  if (pagesAfter > pagesBefore) {
+    const newTabIndex = pagesAfter - 1;
+    await browser.switchTo(newTabIndex);
+    const newPage = browser.getPage();
+    try { await newPage.waitForLoadState('domcontentloaded', { timeout: 5000 }); } catch (_) {}
+    const newUrl = newPage.url();
+    const newTitle = await newPage.title().catch(() => '');
+    const note = `Clicked ${command.selector} → new tab opened (${newUrl})${newTitle ? ' - "' + newTitle + '"' : ''}`;
+    return successResponse(command.id, {
+      clicked: true, newTab: true, tabIndex: newTabIndex, url: newUrl, title: newTitle, note,
+    });
+  }
+  return successResponse(command.id, { clicked: true, note: describeAction('Clicked', command.selector, stats) });
 }
 
 async function handleType(command: TypeCommand, browser: BrowserManager): Promise<Response> {
   const locator = browser.getLocator(command.selector);
-
+  const page = browser.getPage();
+  let stats: NetworkStats;
   try {
-    if (command.clear) {
-      await locator.fill('');
-    }
-
-    await locator.pressSequentially(command.text, {
-      delay: command.delay,
-    });
+    if (command.clear) { await locator.fill(''); }
+    stats = await withNetworkSettled(page, () => locator.pressSequentially(command.text, { delay: command.delay }));
   } catch (error) {
     throw toAIFriendlyError(error, command.selector);
   }
-
-  return successResponse(command.id, { typed: true });
+  const preview = command.text.length > 20 ? command.text.slice(0, 20) + '...' : command.text;
+  return successResponse(command.id, { typed: true, note: describeAction(`Typed "${preview}" into`, command.selector, stats) });
 }
 
 async function handlePress(command: PressCommand, browser: BrowserManager): Promise<Response> {
   const page = browser.getPage();
-
+  let stats: NetworkStats;
   if (command.selector) {
-    await page.press(command.selector, command.key);
+    const locator = browser.getLocator(command.selector);
+    stats = await withNetworkSettled(page, () => locator.press(command.key));
   } else {
-    await page.keyboard.press(command.key);
+    stats = await withNetworkSettled(page, () => page.keyboard.press(command.key));
   }
-
-  return successResponse(command.id, { pressed: true });
+  const target = command.selector ? ` on ${command.selector}` : '';
+  return successResponse(command.id, { pressed: true, note: describeAction(`Pressed ${command.key}${target}`, command.selector || 'page', stats) });
 }
 
 async function handleScreenshot(
@@ -631,77 +711,61 @@ async function handleEvaluate(
 
 async function handleWait(command: WaitCommand, browser: BrowserManager): Promise<Response> {
   const page = browser.getPage();
-
   if (command.selector) {
-    await page.waitForSelector(command.selector, {
+    await browser.getLocator(command.selector).waitFor({
       state: command.state ?? 'visible',
       timeout: command.timeout,
     });
   } else if (command.timeout) {
     await page.waitForTimeout(command.timeout);
   } else {
-    // Default: wait for load state
     await page.waitForLoadState('load');
   }
-
-  return successResponse(command.id, { waited: true });
+  const what = command.selector ? command.selector : (command.timeout ? command.timeout + 'ms' : 'condition');
+  return successResponse(command.id, { waited: true, note: `Waited for ${what}` });
 }
 
 async function handleScroll(command: ScrollCommand, browser: BrowserManager): Promise<Response> {
   const page = browser.getPage();
-
   if (command.selector) {
-    const element = page.locator(command.selector);
+    const element = browser.getLocator(command.selector);
     await element.scrollIntoViewIfNeeded();
-
     if (command.x !== undefined || command.y !== undefined) {
       await element.evaluate(
-        (el, { x, y }) => {
-          el.scrollBy(x ?? 0, y ?? 0);
-        },
+        (el, { x, y }) => { el.scrollBy(x ?? 0, y ?? 0); },
         { x: command.x, y: command.y }
       );
     }
   } else {
-    // Scroll the page
     let deltaX = command.x ?? 0;
     let deltaY = command.y ?? 0;
-
     if (command.direction) {
       const amount = command.amount ?? 100;
       switch (command.direction) {
-        case 'up':
-          deltaY = -amount;
-          break;
-        case 'down':
-          deltaY = amount;
-          break;
-        case 'left':
-          deltaX = -amount;
-          break;
-        case 'right':
-          deltaX = amount;
-          break;
+        case 'up': deltaY = -amount; break;
+        case 'down': deltaY = amount; break;
+        case 'left': deltaX = -amount; break;
+        case 'right': deltaX = amount; break;
       }
     }
-
     await page.evaluate(`window.scrollBy(${deltaX}, ${deltaY})`);
   }
-
-  return successResponse(command.id, { scrolled: true });
+  const dir = command.direction || 'down';
+  const px = command.amount || '';
+  return successResponse(command.id, { scrolled: true, note: `Scrolled ${dir}${px ? ' ' + px + 'px' : ''}${command.selector ? ' on ' + command.selector : ''}` });
 }
 
 async function handleSelect(command: SelectCommand, browser: BrowserManager): Promise<Response> {
   const locator = browser.getLocator(command.selector);
+  const page = browser.getPage();
   const values = Array.isArray(command.values) ? command.values : [command.values];
-
+  let stats: NetworkStats;
   try {
-    await locator.selectOption(values);
+    stats = await withNetworkSettled(page, () => locator.selectOption(values));
   } catch (error) {
     throw toAIFriendlyError(error, command.selector);
   }
-
-  return successResponse(command.id, { selected: values });
+  return successResponse(command.id, { selected: values, note: describeAction(`Selected [${values.join(', ')}] in`, command.selector, stats) });
 }
 
 async function handleHover(command: HoverCommand, browser: BrowserManager): Promise<Response> {
@@ -711,8 +775,7 @@ async function handleHover(command: HoverCommand, browser: BrowserManager): Prom
   } catch (error) {
     throw toAIFriendlyError(error, command.selector);
   }
-
-  return successResponse(command.id, { hovered: true });
+  return successResponse(command.id, { hovered: true, note: `Hovered ${command.selector}` });
 }
 
 async function handleContent(
@@ -720,14 +783,12 @@ async function handleContent(
   browser: BrowserManager
 ): Promise<Response<ContentData>> {
   const page = browser.getPage();
-
   let html: string;
   if (command.selector) {
-    html = await page.locator(command.selector).innerHTML();
+    html = await browser.getLocator(command.selector).innerHTML();
   } else {
     html = await page.content();
   }
-
   return successResponse(command.id, { html });
 }
 
@@ -797,32 +858,39 @@ async function handleWindowNew(
 
 async function handleFill(command: FillCommand, browser: BrowserManager): Promise<Response> {
   const locator = browser.getLocator(command.selector);
+  const page = browser.getPage();
+  let stats: NetworkStats;
   try {
-    await locator.fill(command.value);
+    stats = await withNetworkSettled(page, () => locator.fill(command.value));
   } catch (error) {
     throw toAIFriendlyError(error, command.selector);
   }
-  return successResponse(command.id, { filled: true });
+  const preview = command.value.length > 20 ? command.value.slice(0, 20) + '...' : command.value;
+  return successResponse(command.id, { filled: true, note: describeAction(`Filled "${preview}" into`, command.selector, stats) });
 }
 
 async function handleCheck(command: CheckCommand, browser: BrowserManager): Promise<Response> {
   const locator = browser.getLocator(command.selector);
+  const page = browser.getPage();
+  let stats: NetworkStats;
   try {
-    await locator.check();
+    stats = await withNetworkSettled(page, () => locator.check());
   } catch (error) {
     throw toAIFriendlyError(error, command.selector);
   }
-  return successResponse(command.id, { checked: true });
+  return successResponse(command.id, { checked: true, note: describeAction('Checked', command.selector, stats) });
 }
 
 async function handleUncheck(command: UncheckCommand, browser: BrowserManager): Promise<Response> {
   const locator = browser.getLocator(command.selector);
+  const page = browser.getPage();
+  let stats: NetworkStats;
   try {
-    await locator.uncheck();
+    stats = await withNetworkSettled(page, () => locator.uncheck());
   } catch (error) {
     throw toAIFriendlyError(error, command.selector);
   }
-  return successResponse(command.id, { unchecked: true });
+  return successResponse(command.id, { unchecked: true, note: describeAction('Unchecked', command.selector, stats) });
 }
 
 async function handleUpload(command: UploadCommand, browser: BrowserManager): Promise<Response> {
@@ -833,7 +901,8 @@ async function handleUpload(command: UploadCommand, browser: BrowserManager): Pr
   } catch (error) {
     throw toAIFriendlyError(error, command.selector);
   }
-  return successResponse(command.id, { uploaded: files });
+  const names = files.map(f => f.split('/').pop()).join(', ');
+  return successResponse(command.id, { uploaded: files, note: `Uploaded ${names} to ${command.selector}` });
 }
 
 async function handleDoubleClick(
@@ -841,12 +910,14 @@ async function handleDoubleClick(
   browser: BrowserManager
 ): Promise<Response> {
   const locator = browser.getLocator(command.selector);
+  const page = browser.getPage();
+  let stats: NetworkStats;
   try {
-    await locator.dblclick();
+    stats = await withNetworkSettled(page, () => locator.dblclick());
   } catch (error) {
     throw toAIFriendlyError(error, command.selector);
   }
-  return successResponse(command.id, { clicked: true });
+  return successResponse(command.id, { clicked: true, note: describeAction('Double-clicked', command.selector, stats) });
 }
 
 async function handleFocus(command: FocusCommand, browser: BrowserManager): Promise<Response> {
@@ -856,22 +927,23 @@ async function handleFocus(command: FocusCommand, browser: BrowserManager): Prom
   } catch (error) {
     throw toAIFriendlyError(error, command.selector);
   }
-  return successResponse(command.id, { focused: true });
+  return successResponse(command.id, { focused: true, note: `Focused ${command.selector}` });
 }
 
 async function handleDrag(command: DragCommand, browser: BrowserManager): Promise<Response> {
   const frame = browser.getFrame();
   await frame.dragAndDrop(command.source, command.target);
-  return successResponse(command.id, { dragged: true });
+  return successResponse(command.id, { dragged: true, note: `Dragged ${command.source} to ${command.target}` });
 }
 
 async function handleFrame(command: FrameCommand, browser: BrowserManager): Promise<Response> {
+  const target = command.selector || command.name || command.url || 'unknown';
   await browser.switchToFrame({
     selector: command.selector,
     name: command.name,
     url: command.url,
   });
-  return successResponse(command.id, { switched: true });
+  return successResponse(command.id, { switched: true, note: `Switched to frame ${target}` });
 }
 
 async function handleMainFrame(
@@ -879,7 +951,7 @@ async function handleMainFrame(
   browser: BrowserManager
 ): Promise<Response> {
   browser.switchToMainFrame();
-  return successResponse(command.id, { switched: true });
+  return successResponse(command.id, { switched: true, note: 'Switched to main frame' });
 }
 
 async function handleGetByRole(
@@ -1836,7 +1908,8 @@ async function handleWaitForFunction(
 ): Promise<Response> {
   const page = browser.getPage();
   await page.waitForFunction(command.expression, { timeout: command.timeout });
-  return successResponse(command.id, { waited: true });
+  const expr = command.expression.length > 50 ? command.expression.slice(0, 50) + '...' : command.expression;
+  return successResponse(command.id, { waited: true, note: `Waited for JS: ${expr}` });
 }
 
 async function handleScrollIntoView(
@@ -1844,8 +1917,8 @@ async function handleScrollIntoView(
   browser: BrowserManager
 ): Promise<Response> {
   const page = browser.getPage();
-  await page.locator(command.selector).scrollIntoViewIfNeeded();
-  return successResponse(command.id, { scrolled: true });
+  await browser.getLocator(command.selector).scrollIntoViewIfNeeded();
+  return successResponse(command.id, { scrolled: true, note: `Scrolled ${command.selector} into view` });
 }
 
 async function handleAddInitScript(
