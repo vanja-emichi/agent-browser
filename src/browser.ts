@@ -158,13 +158,19 @@ export class BrowserManager {
     let locator: Locator;
     if (refData.name) {
       locator = page.getByRole(refData.role as any, { name: refData.name, exact: true });
+      // For named elements, use nth for same-name disambiguation
+      if (refData.nth !== undefined) {
+        locator = locator.nth(refData.nth);
+      }
     } else {
+      // For nameless elements, getByRole(role) matches ALL elements of that role.
+      // Use globalNth (position among ALL role matches) for correct disambiguation.
       locator = page.getByRole(refData.role as any);
-    }
-
-    // If an nth index is stored (for disambiguation), use it
-    if (refData.nth !== undefined) {
-      locator = locator.nth(refData.nth);
+      if (refData.globalNth !== undefined) {
+        locator = locator.nth(refData.globalNth);
+      } else if (refData.nth !== undefined) {
+        locator = locator.nth(refData.nth);
+      }
     }
 
     return locator;
@@ -185,6 +191,11 @@ export class BrowserManager {
     const locator = this.getLocatorFromRef(selectorOrRef);
     if (locator) return locator;
 
+    // If it looks like a ref but wasn't found, the snapshot is stale
+    if (this.isRef(selectorOrRef)) {
+      throw new Error(`Ref "${selectorOrRef}" not found. The snapshot may be stale — take a new snapshot and use updated refs.`);
+    }
+
     // Otherwise treat as regular selector
     const page = this.getPage();
     return page.locator(selectorOrRef);
@@ -195,7 +206,7 @@ export class BrowserManager {
    */
   getPage(): Page {
     if (this.pages.length === 0) {
-      throw new Error('Browser not launched. Call launch first.');
+      throw new Error('No open pages available. All tabs may have been closed. Use "tab_new" to open a new tab or "navigate" to a URL.');
     }
     return this.pages[this.activePageIndex];
   }
@@ -1281,6 +1292,48 @@ export class BrowserManager {
    * This handles pages created externally (e.g., via target="_blank" links, window.open)
    */
   private setupContextTracking(context: BrowserContext): void {
+    // Auto-dismiss common cookie consent banners on every page
+    context.addInitScript(`
+      (function() {
+        var SELECTORS = [
+          "[class*='cookie'] button[class*='accept']",
+          "button[id*='cookie-accept']",
+          "[class*='consent'] button:first-of-type",
+          "button[aria-label*='Accept']",
+          "button[aria-label*='accept']",
+          "[class*='cookie'] [class*='accept']",
+          "[id*='cookie'] button[class*='accept']",
+          "[id*='consent'] button:first-of-type",
+          "[class*='cookie-banner'] button",
+          "[class*='cookieBanner'] button"
+        ];
+        var TEXT_PATTERNS = /^(accept all|accept cookies|i agree|ok|got it|allow all|agree|allow cookies)$/i;
+        function dismissCookieConsent() {
+          for (var i = 0; i < SELECTORS.length; i++) {
+            try {
+              var btn = document.querySelector(SELECTORS[i]);
+              if (btn && btn.offsetParent !== null) { btn.click(); return true; }
+            } catch(e) {}
+          }
+          try {
+            var buttons = document.querySelectorAll('button, [role="button"], a.button, a[class*="btn"]');
+            for (var j = 0; j < buttons.length; j++) {
+              var text = (buttons[j].textContent || '').trim();
+              if (TEXT_PATTERNS.test(text) && buttons[j].offsetParent !== null) {
+                buttons[j].click(); return true;
+              }
+            }
+          } catch(e) {}
+          return false;
+        }
+        setTimeout(dismissCookieConsent, 500);
+        setTimeout(dismissCookieConsent, 1500);
+        var observer = new MutationObserver(function() { dismissCookieConsent(); });
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+        setTimeout(function() { observer.disconnect(); }, 10000);
+      })();
+    `);
+
     context.on('page', (page) => {
       // Only add if not already tracked (avoids duplicates when newTab() creates pages)
       if (!this.pages.includes(page)) {
