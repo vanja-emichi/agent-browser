@@ -31,15 +31,15 @@ echo "Deploying A0 integration files..."
 mkdir -p "${A0_ROOT}/agents/browser/prompts"
 mkdir -p "${A0_ROOT}/agents/browser/extensions/agent_init"
 
-cp "${SCRIPT_DIR}/a0/agents/browser/agent.json" "${A0_ROOT}/agents/browser/agent.json"
-cp "${SCRIPT_DIR}/a0/agents/browser/_context.md" "${A0_ROOT}/agents/browser/_context.md"
-cp "${SCRIPT_DIR}/a0/agents/browser/prompts/agent.system.main.role.md" "${A0_ROOT}/agents/browser/prompts/agent.system.main.role.md"
-cp "${SCRIPT_DIR}/a0/agents/browser/extensions/agent_init/_10_use_browser_model.py" "${A0_ROOT}/agents/browser/extensions/agent_init/_10_use_browser_model.py"
+cp "${SCRIPT_DIR}/agents/browser/agent.json" "${A0_ROOT}/agents/browser/agent.json"
+cp "${SCRIPT_DIR}/agents/browser/_context.md" "${A0_ROOT}/agents/browser/_context.md"
+cp "${SCRIPT_DIR}/agents/browser/prompts/agent.system.main.role.md" "${A0_ROOT}/agents/browser/prompts/agent.system.main.role.md"
+cp "${SCRIPT_DIR}/agents/browser/extensions/agent_init/_10_use_browser_model.py" "${A0_ROOT}/agents/browser/extensions/agent_init/_10_use_browser_model.py"
 echo " ✓ Browser agent profile deployed"
 
 # Prompts
-cp "${SCRIPT_DIR}/a0/prompts/agent.system.tool.browser.md" "${A0_ROOT}/prompts/agent.system.tool.browser.md"
-cp "${SCRIPT_DIR}/a0/prompts/browser_agent.system.md" "${A0_ROOT}/prompts/browser_agent.system.md"
+cp "${SCRIPT_DIR}/prompts/agent.system.tool.browser.md" "${A0_ROOT}/prompts/agent.system.tool.browser.md"
+cp "${SCRIPT_DIR}/prompts/browser_agent.system.md" "${A0_ROOT}/prompts/browser_agent.system.md"
 echo " ✓ Browser prompts deployed"
 
 echo ""
