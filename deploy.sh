@@ -42,6 +42,15 @@ cp "${SCRIPT_DIR}/prompts/agent.system.tool.browser.md" "${A0_ROOT}/prompts/agen
 cp "${SCRIPT_DIR}/prompts/browser_agent.system.md" "${A0_ROOT}/prompts/browser_agent.system.md"
 echo " ✓ Browser prompts deployed"
 
+
+
+# Vision tool
+mkdir -p "${A0_ROOT}/python/tools"
+cp "${SCRIPT_DIR}/python/tools/vision_load.py" "${A0_ROOT}/python/tools/vision_load.py"
+echo "  ✓ Vision load tool deployed"
+
+cp "${SCRIPT_DIR}/prompts/agent.system.tools_vision.md" "${A0_ROOT}/prompts/agent.system.tools_vision.md"
+echo "  ✓ Vision prompt deployed"
 echo ""
 echo "Done. Agent-browser deployed to ${A0_ROOT}"
 echo ""
